@@ -4,18 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Group Video Call</title>
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.3.2/peerjs.min.js"></script>
-</head>
-<body>
-    <h1>Group Video Call</h1>
-    <button id="joinCallBtn">Join Call</button>
-    <video id="localVideo" autoplay muted></video>
-    <div id="remoteVideos"></div>
-
-    <script>
+    <!-- Use type="module" for Firebase imports -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
+        import { getDatabase, ref, set, onChildAdded, update } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js";
+        import { getAuth } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js";
+        
         // Firebase config
         const firebaseConfig = {
             apiKey: "AIzaSyButcRwGtboCo_WrVxVz-7NXiaawmEY0NI",
@@ -27,9 +21,13 @@
             appId: "1:180941029548:web:438ade660742bee6629f09",
             measurementId: "G-5222C6DH4Y"
         };
-        firebase.initializeApp(firebaseConfig);
 
-        const db = firebase.database();
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        const auth = getAuth(app);
+
+        // PeerJS setup
         const peer = new Peer();
         const localVideo = document.getElementById('localVideo');
         const remoteVideos = document.getElementById('remoteVideos');
@@ -92,13 +90,13 @@
 
                 // Store offer in Firebase under a unique key
                 const peerData = { offer: offer };
-                const peerRef = db.ref('calls/groupVideoCall/' + peerId);
-                peerRef.set(peerData);
+                const peerRef = ref(db, 'calls/groupVideoCall/' + peerId);
+                set(peerRef, peerData);
             }
         });
 
         // Listen for incoming offers and handle them
-        db.ref('calls/groupVideoCall').on('child_added', (snapshot) => {
+        onChildAdded(ref(db, 'calls/groupVideoCall'), async (snapshot) => {
             const peerId = snapshot.key;
             const peerData = snapshot.val();
             const offer = peerData?.offer;
@@ -129,7 +127,7 @@
             await peer.connection.setLocalDescription(answer);
 
             // Update Firebase with the answer
-            db.ref('calls/groupVideoCall/' + peerId).update({ answer: answer });
+            update(ref(db, 'calls/groupVideoCall/' + peerId), { answer: answer });
         });
 
         // Handle peer connection close
@@ -138,7 +136,12 @@
                 peers[peerId].close();
             }
         });
-
     </script>
+</head>
+<body>
+    <h1>Group Video Call</h1>
+    <button id="joinCallBtn">Join Call</button>
+    <video id="localVideo" autoplay muted></video>
+    <div id="remoteVideos"></div>
 </body>
 </html>
