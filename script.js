@@ -1,3 +1,7 @@
+// Import Firebase SDK functions (this is for Firebase v9+)
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
+import { getDatabase, ref, set, push, onChildAdded, onValue } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js";
+
 const firebaseConfig = {
   apiKey: "AIzaSyButcRwGtboCo_WrVxVz-7NXiaawmEY0NI",
   authDomain: "create-database-a8af3.firebaseapp.com",
@@ -9,8 +13,9 @@ const firebaseConfig = {
   measurementId: "G-5222C6DH4Y"
 };
 
-firebase.initializeApp(firebaseConfig);
-const database = firebase.database();
+// Initialize Firebase
+const app = initializeApp(firebaseConfig); // Initialize Firebase
+const database = getDatabase(app); // Get the Realtime Database instance
 
 const videoGrid = document.getElementById("video-grid");
 const servers = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
