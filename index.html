@@ -10,26 +10,26 @@
     <h1>Group Video Call</h1>
     <div id="video-grid"></div>
 
-    <!-- Firebase SDKs (Modular v9) -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
-        import { getDatabase, ref, set, push, onChildAdded, onValue } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js";
+    <!-- Firebase SDK (non-modular v7) -->
+    <script src="https://www.gstatic.com/firebasejs/7.20.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/7.20.0/firebase-database.js"></script>
 
-        // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+    <script>
+        // 🔹 Replace this with your Firebase Config
         const firebaseConfig = {
-          apiKey: "AIzaSyButcRwGtboCo_WrVxVz-7NXiaawmEY0NI",
-          authDomain: "create-database-a8af3.firebaseapp.com",
-          databaseURL: "https://create-database-a8af3-default-rtdb.firebaseio.com",
-          projectId: "create-database-a8af3",
-          storageBucket: "create-database-a8af3.firebasestorage.app",
-          messagingSenderId: "180941029548",
-          appId: "1:180941029548:web:438ade660742bee6629f09",
-          measurementId: "G-5222C6DH4Y"
+            apiKey: "AIzaSyButcRwGtboCo_WrVxVz-7NXiaawmEY0NI",
+            authDomain: "create-database-a8af3.firebaseapp.com",
+            databaseURL: "https://create-database-a8af3-default-rtdb.firebaseio.com",
+            projectId: "create-database-a8af3",
+            storageBucket: "create-database-a8af3.firebasestorage.app",
+            messagingSenderId: "180941029548",
+            appId: "1:180941029548:web:438ade660742bee6629f09",
+            measurementId: "G-5222C6DH4Y"
         };
 
         // Initialize Firebase
-        const app = initializeApp(firebaseConfig); 
-        const database = getDatabase(app); // Get the Realtime Database instance
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database(); // Get the Realtime Database instance
 
         const videoGrid = document.getElementById("video-grid");
         const servers = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
@@ -48,8 +48,8 @@
                 videoGrid.appendChild(localVideo);
 
                 // Listen for new connections
-                const callersRef = ref(database, "callers");
-                onChildAdded(callersRef, (snapshot) => {
+                const callersRef = database.ref("callers");
+                callersRef.on("child_added", (snapshot) => {
                     const callerId = snapshot.key;
                     console.log("New caller detected:", callerId); // Debugging line
                     if (callerId !== firebase.auth().currentUser?.uid) {
@@ -58,9 +58,9 @@
                 });
 
                 // Announce presence
-                const userRef = push(callersRef);
-                set(userRef, true);
-                onValue(userRef, () => {}, { onlyOnce: true });
+                const userRef = callersRef.push();
+                userRef.set(true);
+                userRef.on("value", () => {}, { onlyOnce: true });
             })
             .catch(err => {
                 console.error("Error accessing media devices.", err);  // Debugging line
@@ -83,46 +83,45 @@
 
             peerConnection.onicecandidate = event => {
                 if (event.candidate) {
-                    const candidatesRef = ref(database, `candidates/${callerId}`);
-                    push(candidatesRef, event.candidate);
+                    const candidatesRef = database.ref(`candidates/${callerId}`);
+                    candidatesRef.push(event.candidate);
                 }
             };
 
             // 🔹 Handle Offer/Answer exchange
-            const offersRef = ref(database, `offers/${callerId}`);
-            onValue(offersRef, snapshot => {
+            const offersRef = database.ref(`offers/${callerId}`);
+            offersRef.on("value", snapshot => {
                 if (snapshot.exists()) {
                     peerConnection.setRemoteDescription(new RTCSessionDescription(snapshot.val()));
                     peerConnection.createAnswer()
                         .then(answer => {
                             peerConnection.setLocalDescription(answer);
-                            const answersRef = ref(database, `answers/${callerId}`);
-                            set(answersRef, answer);
+                            const answersRef = database.ref(`answers/${callerId}`);
+                            answersRef.set(answer);
                         });
                 } else {
                     peerConnection.createOffer()
                         .then(offer => {
                             peerConnection.setLocalDescription(offer);
-                            set(offersRef, offer);
+                            offersRef.set(offer);
                         });
                 }
             });
 
-            const answersRef = ref(database, `answers/${callerId}`);
-            onValue(answersRef, snapshot => {
+            const answersRef = database.ref(`answers/${callerId}`);
+            answersRef.on("value", snapshot => {
                 if (snapshot.exists()) {
                     peerConnection.setRemoteDescription(new RTCSessionDescription(snapshot.val()));
                 }
             });
 
-            const candidatesRef = ref(database, `candidates/${callerId}`);
-            onChildAdded(candidatesRef, snapshot => {
+            const candidatesRef = database.ref(`candidates/${callerId}`);
+            candidatesRef.on("child_added", snapshot => {
                 if (snapshot.exists()) {
                     peerConnection.addIceCandidate(new RTCIceCandidate(snapshot.val()));
                 }
             });
         }
     </script>
-
 </body>
 </html>
