@@ -51,12 +51,13 @@
     <button id="join-btn">Join Call</button>
     <div id="video-container"></div>
 
-    <!-- Add Firebase SDKs -->
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js"></script>
+    <!-- Add Firebase SDKs as modules -->
+    <script type="module">
+        // Firebase imports
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
+        import { getDatabase, ref, set, onChildAdded, onChildChanged } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js";
 
-    <script>
-        // Your Firebase configuration (replace with your actual config)
+        // Your Firebase configuration
         const firebaseConfig = {
             apiKey: "AIzaSyButcRwGtboCo_WrVxVz-7NXiaawmEY0NI",
             authDomain: "create-database-a8af3.firebaseapp.com",
@@ -69,11 +70,11 @@
         };
 
         // Initialize Firebase
-        const app = firebase.initializeApp(firebaseConfig);
-        const database = firebase.database(app);
+        const app = initializeApp(firebaseConfig);
+        const database = getDatabase(app);
 
         // Reference to Firebase Realtime Database for storing users in the call
-        const dbRef = database.ref('calls/groupVideoCall');
+        const dbRef = ref(database, 'calls/groupVideoCall');
 
         // Video elements
         const localVideo = document.createElement('video');
@@ -106,13 +107,13 @@
 
                 // Store the user's ID in Firebase
                 const userId = Math.floor(Math.random() * 1000000).toString();
-                dbRef.child(userId).set({
+                set(ref(database, 'calls/groupVideoCall/' + userId), {
                     id: userId,
                     stream: true
                 });
 
                 // Listen for other users joining the call
-                dbRef.on('child_added', async (snapshot) => {
+                onChildAdded(dbRef, async (snapshot) => {
                     const peerId = snapshot.key;
 
                     // Don't connect to yourself
@@ -140,10 +141,10 @@
                     await peerConnection.setLocalDescription(offer);
 
                     // Send the offer to the new peer (via Firebase)
-                    dbRef.child(peerId).update({ offer: offer });
+                    set(ref(database, 'calls/groupVideoCall/' + peerId), { offer: offer });
 
                     // Listen for answers from the other user
-                    dbRef.child(peerId).on('child_changed', async (change) => {
+                    onChildChanged(dbRef, async (change) => {
                         if (change.val().answer) {
                             const answer = change.val().answer;
                             await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
@@ -152,7 +153,7 @@
                 });
 
                 // Listen for other users sending offers
-                dbRef.on('child_changed', async (snapshot) => {
+                onChildChanged(dbRef, async (snapshot) => {
                     const peerId = snapshot.key;
                     const offer = snapshot.val().offer;
 
@@ -182,12 +183,13 @@
                     await peerConnection.setLocalDescription(answer);
 
                     // Send the answer back to the offerer
-                    dbRef.child(peerId).update({ answer: answer });
+                    set(ref(database, 'calls/groupVideoCall/' + peerId), { answer: answer });
                 });
             } catch (err) {
                 console.error('Error getting media:', err);
             }
         }
     </script>
+
 </body>
 </html>
