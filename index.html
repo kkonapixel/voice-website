@@ -51,7 +51,10 @@
     <button id="join-btn">Join Call</button>
     <div id="video-container"></div>
 
-    <script src="https://cdn.firebase.com/js/client/2.4.2/firebase.js"></script>
+    <!-- Add Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js"></script>
+
     <script>
         // Your Firebase configuration (replace with your actual config)
         const firebaseConfig = {
@@ -66,10 +69,11 @@
         };
 
         // Initialize Firebase
-        firebase.initializeApp(firebaseConfig);
+        const app = firebase.initializeApp(firebaseConfig);
+        const database = firebase.database(app);
 
         // Reference to Firebase Realtime Database for storing users in the call
-        const dbRef = firebase.database().ref('calls/groupVideoCall');
+        const dbRef = database.ref('calls/groupVideoCall');
 
         // Video elements
         const localVideo = document.createElement('video');
