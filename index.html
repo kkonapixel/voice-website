@@ -4,132 +4,49 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Group Video Call</title>
-    <link rel="stylesheet" href="styles.css">
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+            flex-direction: column;
+        }
+        #video-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        video {
+            width: 300px;
+            height: 200px;
+        }
+        #local-video {
+            display: none;
+        }
+        button {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+    </style>
 </head>
 <body>
-    <h1>Group Video Call</h1>
     <div id="video-grid"></div>
+    <video id="local-video" autoplay muted></video>
+    <button id="startCall">Start Call</button>
 
-    <!-- Firebase SDK for ES Modules (v9) -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
-        import { getDatabase, ref, set, push, onValue } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js";
-
-        // Firebase config (replace with your actual config)
-        const firebaseConfig = {
-          apiKey: "AIzaSyButcRwGtboCo_WrVxVz-7NXiaawmEY0NI",
-          authDomain: "create-database-a8af3.firebaseapp.com",
-          databaseURL: "https://create-database-a8af3-default-rtdb.firebaseio.com",
-          projectId: "create-database-a8af3",
-          storageBucket: "create-database-a8af3.firebasestorage.app",
-          messagingSenderId: "180941029548",
-          appId: "1:180941029548:web:438ade660742bee6629f09",
-          measurementId: "G-5222C6DH4Y"
-        };
-
-        // Initialize Firebase
-        const app = initializeApp(firebaseConfig);
-        const database = getDatabase(app);
-        const dbRef = ref(database, 'calls/');
-
-        // Variables for WebRTC connections and streams
-        let localStream;
-        let peerConnections = {};
-        let localVideoElement;
-
-        // Store data to Firebase Realtime Database
-        function storeCallData(callId, callDetails) {
-            const callRef = push(dbRef);
-            set(callRef, {
-                callId: callId,
-                details: callDetails,
-                timestamp: new Date().toISOString()
-            }).then(() => {
-                console.log("Call data saved successfully!");
-            }).catch((error) => {
-                console.error("Error saving call data: ", error);
-            });
-        }
-
-        // Function to setup camera and start the call
-        function setupCameraAndStartCall() {
-            navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-                .then(stream => {
-                    localStream = stream;
-                    localVideoElement = document.createElement('video');
-                    localVideoElement.srcObject = stream;
-                    localVideoElement.play();
-                    document.getElementById('video-grid').appendChild(localVideoElement);
-
-                    // Listen for incoming calls or peers
-                    listenForPeers();
-                })
-                .catch(error => {
-                    console.error("Error accessing camera:", error);
-                });
-        }
-
-        // Function to listen for incoming peers (Firebase signaling)
-        function listenForPeers() {
-            onValue(dbRef, snapshot => {
-                const calls = snapshot.val();
-                for (const callId in calls) {
-                    const callData = calls[callId];
-                    handlePeer(callData, callId);
-                }
-            }, error => {
-                console.error("Error listening for peers:", error);
-            });
-        }
-
-        // Handle new peer
-        function handlePeer(callData, callId) {
-            // Create a new peer connection for each user
-            const peerConnection = new RTCPeerConnection();
-
-            // Add local stream to peer connection
-            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-
-            // Handle ICE candidates
-            peerConnection.onicecandidate = event => {
-                if (event.candidate) {
-                    push(ref(database, 'calls/' + callId + '/candidates'), event.candidate);
-                }
-            };
-
-            // Handle remote stream
-            peerConnection.ontrack = event => {
-                const remoteVideo = document.createElement('video');
-                remoteVideo.srcObject = event.streams[0];
-                remoteVideo.play();
-                document.getElementById('video-grid').appendChild(remoteVideo);
-            };
-
-            peerConnections[callId] = peerConnection;
-
-            // Create offer and send to Firebase
-            createOffer(callId, peerConnection);
-        }
-
-        // Function to create an offer
-        function createOffer(callId, peerConnection) {
-            peerConnection.createOffer()
-                .then(offer => {
-                    return peerConnection.setLocalDescription(offer);
-                })
-                .then(() => {
-                    set(ref(database, 'calls/' + callId + '/offer'), peerConnection.localDescription);
-                })
-                .catch(error => {
-                    console.error("Error creating offer:", error);
-                });
-        }
-
-        // Initialize the call
-        setupCameraAndStartCall();
-    </script>
-
-    <!-- Your custom JavaScript for handling video/audio and the actual UI (camera logic) -->
-    <script type="module" src="script.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.3.1/peer.min.js"></script>
+    <script src="script.js"></script>
 </body>
 </html>
