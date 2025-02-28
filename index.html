@@ -138,7 +138,7 @@
 
                     // Create an offer to connect to the new user
                     const offer = await peerConnection.createOffer();
-                    await peerConnection.setLocalDescription(offer);
+                    await peerConnection.setLocalDescription(new RTCSessionDescription({ type: "offer", sdp: offer.sdp }));
 
                     // Send the offer to the new peer (via Firebase)
                     set(ref(database, 'calls/groupVideoCall/' + peerId), { offer: offer });
@@ -147,7 +147,11 @@
                     onChildChanged(dbRef, async (change) => {
                         if (change.val().answer) {
                             const answer = change.val().answer;
-                            await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+
+                            // Ensure that the connection is not already stable before setting the answer
+                            if (peerConnection.signalingState === "stable") {
+                                await peerConnection.setRemoteDescription(new RTCSessionDescription({ type: "answer", sdp: answer.sdp }));
+                            }
                         }
                     });
                 });
@@ -178,9 +182,9 @@
                     };
 
                     // Set remote description and create an answer
-                    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription({ type: "offer", sdp: offer.sdp }));
                     const answer = await peerConnection.createAnswer();
-                    await peerConnection.setLocalDescription(answer);
+                    await peerConnection.setLocalDescription(new RTCSessionDescription({ type: "answer", sdp: answer.sdp }));
 
                     // Send the answer back to the offerer
                     set(ref(database, 'calls/groupVideoCall/' + peerId), { answer: answer });
