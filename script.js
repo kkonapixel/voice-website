@@ -1,13 +1,11 @@
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
-  apiKey: "AIzaSyButcRwGtboCo_WrVxVz-7NXiaawmEY0NI",
-  authDomain: "create-database-a8af3.firebaseapp.com",
-  databaseURL: "https://create-database-a8af3-default-rtdb.firebaseio.com",
-  projectId: "create-database-a8af3",
-  storageBucket: "create-database-a8af3.firebasestorage.app",
-  messagingSenderId: "180941029548",
-  appId: "1:180941029548:web:438ade660742bee6629f09",
-  measurementId: "G-5222C6DH4Y"
+    apiKey: "AIzaSyButcRwGtboCo_WrVxVz-7NXiaawmEY0NI",
+    authDomain: "create-database-a8af3.firebaseapp.com",
+    databaseURL: "https://create-database-a8af3-default-rtdb.firebaseio.com",
+    projectId: "create-database-a8af3",
+    storageBucket: "create-database-a8af3.firebasestorage.app",
+    messagingSenderId: "180941029548",
+    appId: "1:180941029548:web:438ade660742bee6629f09"
 };
 
 firebase.initializeApp(firebaseConfig);
@@ -21,6 +19,7 @@ let localStream;
 // 🔹 Get User Media (Camera & Mic)
 navigator.mediaDevices.getUserMedia({ video: true, audio: true })
     .then(stream => {
+        console.log("Local stream received");  // Debugging line
         localStream = stream;
         const localVideo = document.createElement("video");
         localVideo.srcObject = stream;
@@ -31,6 +30,7 @@ navigator.mediaDevices.getUserMedia({ video: true, audio: true })
         // Listen for new connections
         database.ref("callers").on("child_added", snapshot => {
             const callerId = snapshot.key;
+            console.log("New caller detected:", callerId); // Debugging line
             if (callerId !== firebase.auth().currentUser?.uid) {
                 connectToUser(callerId);
             }
@@ -41,10 +41,13 @@ navigator.mediaDevices.getUserMedia({ video: true, audio: true })
         userRef.set(true);
         userRef.onDisconnect().remove();
     })
-    .catch(err => console.error("Error accessing media devices.", err));
+    .catch(err => {
+        console.error("Error accessing media devices.", err);  // Debugging line
+    });
 
 // 🔹 Connect to a new user
 function connectToUser(callerId) {
+    console.log("Connecting to user:", callerId);  // Debugging line
     const peerConnection = new RTCPeerConnection(servers);
     peerConnections[callerId] = peerConnection;
 
