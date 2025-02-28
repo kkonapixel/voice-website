@@ -158,7 +158,8 @@
                 // Listen for other users sending offers
                 onChildChanged(dbRef, async (snapshot) => {
                     const peerId = snapshot.key;
-                    const offer = snapshot.val().offer;
+                    const peerData = snapshot.val();
+                    const offer = peerData?.offer;
 
                     // Don't process your own offer
                     if (peerId === userId) return;
