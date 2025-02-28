@@ -4,19 +4,56 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Group Video Call</title>
-    <link rel="stylesheet" href="styles.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+        }
+        h1 {
+            margin-top: 20px;
+        }
+        #video-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            width: 100%;
+        }
+        video {
+            width: 300px;
+            height: 200px;
+            margin: 10px;
+            border-radius: 10px;
+            border: 2px solid #ccc;
+        }
+        #join-btn {
+            padding: 10px 20px;
+            margin: 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #join-btn:hover {
+            background-color: #0056b3;
+        }
+    </style>
 </head>
 <body>
+
     <h1>Group Video Call</h1>
-    <div id="video-grid"></div>
+    <button id="join-btn">Join Call</button>
+    <div id="video-container"></div>
 
-    <!-- Firebase SDK v7 (including Auth) -->
-    <script src="https://www.gstatic.com/firebasejs/7.20.0/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/7.20.0/firebase-auth.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/7.20.0/firebase-database.js"></script>
-
+    <script src="https://cdn.firebase.com/js/client/2.4.2/firebase.js"></script>
     <script>
-        // 🔹 Replace this with your Firebase Config
+        // Your Firebase configuration (replace with your actual config)
         const firebaseConfig = {
             apiKey: "AIzaSyButcRwGtboCo_WrVxVz-7NXiaawmEY0NI",
             authDomain: "create-database-a8af3.firebaseapp.com",
@@ -30,99 +67,122 @@
 
         // Initialize Firebase
         firebase.initializeApp(firebaseConfig);
-        const database = firebase.database(); // Get the Realtime Database instance
-        const auth = firebase.auth(); // Initialize Firebase Auth
 
-        const videoGrid = document.getElementById("video-grid");
-        const servers = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
-        const peerConnections = {}; // Stores all connections
+        // Reference to Firebase Realtime Database for storing users in the call
+        const dbRef = firebase.database().ref('calls/groupVideoCall');
+
+        // Video elements
+        const localVideo = document.createElement('video');
+        localVideo.setAttribute('autoplay', 'true');
+        localVideo.setAttribute('muted', 'true');
+        document.getElementById('video-container').appendChild(localVideo);
+
+        // STUN server (no TURN server)
+        const iceServers = [
+            {
+                urls: "stun:stun.l.google.com:19302" // Google STUN server
+            }
+        ];
+
+        // Local stream (user's webcam and microphone)
         let localStream;
+        let peerConnections = {};
 
-        // 🔹 Get User Media (Camera & Mic)
-        navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-            .then(stream => {
-                console.log("Local stream received");  // Debugging line
-                localStream = stream;
-                const localVideo = document.createElement("video");
-                localVideo.srcObject = stream;
-                localVideo.muted = true;
-                localVideo.autoplay = true;
-                videoGrid.appendChild(localVideo);
+        // When the "Join Call" button is clicked
+        document.getElementById('join-btn').onclick = () => {
+            startCall();
+        };
 
-                // Listen for new connections
-                const callersRef = database.ref("callers");
-                callersRef.on("child_added", (snapshot) => {
-                    const callerId = snapshot.key;
-                    console.log("New caller detected:", callerId); // Debugging line
-                    if (callerId !== auth.currentUser?.uid) {
-                        connectToUser(callerId);
-                    }
+        // Start the call (get local video/audio and set up Firebase)
+        async function startCall() {
+            try {
+                // Get the user's media (camera and microphone)
+                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                localVideo.srcObject = localStream;
+
+                // Store the user's ID in Firebase
+                const userId = Math.floor(Math.random() * 1000000).toString();
+                dbRef.child(userId).set({
+                    id: userId,
+                    stream: true
                 });
 
-                // Announce presence
-                const userRef = callersRef.push();
-                userRef.set(true);
-                userRef.on("value", () => {}, { onlyOnce: true });
-            })
-            .catch(err => {
-                console.error("Error accessing media devices.", err);  // Debugging line
-            });
+                // Listen for other users joining the call
+                dbRef.on('child_added', async (snapshot) => {
+                    const peerId = snapshot.key;
 
-        // 🔹 Connect to a new user
-        function connectToUser(callerId) {
-            console.log("Connecting to user:", callerId);  // Debugging line
-            const peerConnection = new RTCPeerConnection(servers);
-            peerConnections[callerId] = peerConnection;
+                    // Don't connect to yourself
+                    if (peerId === userId) return;
 
-            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+                    // Set up a new peer connection for each new user
+                    const peerConnection = new RTCPeerConnection({ iceServers });
+                    peerConnections[peerId] = peerConnection;
 
-            peerConnection.ontrack = event => {
-                const remoteVideo = document.createElement("video");
-                remoteVideo.srcObject = event.streams[0];
-                remoteVideo.autoplay = true;
-                videoGrid.appendChild(remoteVideo);
-            };
+                    // Add the local stream to the peer connection
+                    localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
 
-            peerConnection.onicecandidate = event => {
-                if (event.candidate) {
-                    const candidatesRef = database.ref(`candidates/${callerId}`);
-                    candidatesRef.push(event.candidate);
-                }
-            };
+                    // Display remote video
+                    const remoteVideo = document.createElement('video');
+                    remoteVideo.setAttribute('autoplay', 'true');
+                    document.getElementById('video-container').appendChild(remoteVideo);
 
-            // 🔹 Handle Offer/Answer exchange
-            const offersRef = database.ref(`offers/${callerId}`);
-            offersRef.on("value", snapshot => {
-                if (snapshot.exists()) {
-                    peerConnection.setRemoteDescription(new RTCSessionDescription(snapshot.val()));
-                    peerConnection.createAnswer()
-                        .then(answer => {
-                            peerConnection.setLocalDescription(answer);
-                            const answersRef = database.ref(`answers/${callerId}`);
-                            answersRef.set(answer);
-                        });
-                } else {
-                    peerConnection.createOffer()
-                        .then(offer => {
-                            peerConnection.setLocalDescription(offer);
-                            offersRef.set(offer);
-                        });
-                }
-            });
+                    // Set up the remote stream
+                    peerConnection.ontrack = (event) => {
+                        remoteVideo.srcObject = event.streams[0];
+                    };
 
-            const answersRef = database.ref(`answers/${callerId}`);
-            answersRef.on("value", snapshot => {
-                if (snapshot.exists()) {
-                    peerConnection.setRemoteDescription(new RTCSessionDescription(snapshot.val()));
-                }
-            });
+                    // Create an offer to connect to the new user
+                    const offer = await peerConnection.createOffer();
+                    await peerConnection.setLocalDescription(offer);
 
-            const candidatesRef = database.ref(`candidates/${callerId}`);
-            candidatesRef.on("child_added", snapshot => {
-                if (snapshot.exists()) {
-                    peerConnection.addIceCandidate(new RTCIceCandidate(snapshot.val()));
-                }
-            });
+                    // Send the offer to the new peer (via Firebase)
+                    dbRef.child(peerId).update({ offer: offer });
+
+                    // Listen for answers from the other user
+                    dbRef.child(peerId).on('child_changed', async (change) => {
+                        if (change.val().answer) {
+                            const answer = change.val().answer;
+                            await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+                        }
+                    });
+                });
+
+                // Listen for other users sending offers
+                dbRef.on('child_changed', async (snapshot) => {
+                    const peerId = snapshot.key;
+                    const offer = snapshot.val().offer;
+
+                    // Don't process your own offer
+                    if (peerId === userId) return;
+
+                    // Set up peer connection for the other user
+                    const peerConnection = new RTCPeerConnection({ iceServers });
+                    peerConnections[peerId] = peerConnection;
+
+                    // Add the local stream to the peer connection
+                    localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+                    // Display remote video
+                    const remoteVideo = document.createElement('video');
+                    remoteVideo.setAttribute('autoplay', 'true');
+                    document.getElementById('video-container').appendChild(remoteVideo);
+
+                    // Set up the remote stream
+                    peerConnection.ontrack = (event) => {
+                        remoteVideo.srcObject = event.streams[0];
+                    };
+
+                    // Set remote description and create an answer
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+                    const answer = await peerConnection.createAnswer();
+                    await peerConnection.setLocalDescription(answer);
+
+                    // Send the answer back to the offerer
+                    dbRef.child(peerId).update({ answer: answer });
+                });
+            } catch (err) {
+                console.error('Error getting media:', err);
+            }
         }
     </script>
 </body>
