@@ -15,7 +15,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
         import { getDatabase, ref, set, push, onValue } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js";
 
-        // Firebase config
+        // Firebase config (replace with your actual config)
         const firebaseConfig = {
           apiKey: "AIzaSyButcRwGtboCo_WrVxVz-7NXiaawmEY0NI",
           authDomain: "create-database-a8af3.firebaseapp.com",
@@ -30,10 +30,14 @@
         // Initialize Firebase
         const app = initializeApp(firebaseConfig);
         const database = getDatabase(app);
-
-        // Store data to Firebase Realtime Database
         const dbRef = ref(database, 'calls/');
 
+        // Variables for WebRTC connections and streams
+        let localStream;
+        let peerConnections = {};
+        let localVideoElement;
+
+        // Store data to Firebase Realtime Database
         function storeCallData(callId, callDetails) {
             const callRef = push(dbRef);
             set(callRef, {
@@ -47,24 +51,85 @@
             });
         }
 
-        // Listen for updates in 'calls'
-        function listenForCalls() {
-            onValue(dbRef, (snapshot) => {
+        // Function to setup camera and start the call
+        function setupCameraAndStartCall() {
+            navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+                .then(stream => {
+                    localStream = stream;
+                    localVideoElement = document.createElement('video');
+                    localVideoElement.srcObject = stream;
+                    localVideoElement.play();
+                    document.getElementById('video-grid').appendChild(localVideoElement);
+
+                    // Listen for incoming calls or peers
+                    listenForPeers();
+                })
+                .catch(error => {
+                    console.error("Error accessing camera:", error);
+                });
+        }
+
+        // Function to listen for incoming peers (Firebase signaling)
+        function listenForPeers() {
+            onValue(dbRef, snapshot => {
                 const calls = snapshot.val();
-                console.log("Current calls:", calls);
-            }, (error) => {
-                console.error("Error reading data: ", error);
+                for (const callId in calls) {
+                    const callData = calls[callId];
+                    handlePeer(callData, callId);
+                }
+            }, error => {
+                console.error("Error listening for peers:", error);
             });
         }
 
-        listenForCalls();
+        // Handle new peer
+        function handlePeer(callData, callId) {
+            // Create a new peer connection for each user
+            const peerConnection = new RTCPeerConnection();
 
-        // Example usage of storing a new call data
-        storeCallData('call123', { host: 'User1', participants: ['User1', 'User2', 'User3'] });
+            // Add local stream to peer connection
+            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+            // Handle ICE candidates
+            peerConnection.onicecandidate = event => {
+                if (event.candidate) {
+                    push(ref(database, 'calls/' + callId + '/candidates'), event.candidate);
+                }
+            };
+
+            // Handle remote stream
+            peerConnection.ontrack = event => {
+                const remoteVideo = document.createElement('video');
+                remoteVideo.srcObject = event.streams[0];
+                remoteVideo.play();
+                document.getElementById('video-grid').appendChild(remoteVideo);
+            };
+
+            peerConnections[callId] = peerConnection;
+
+            // Create offer and send to Firebase
+            createOffer(callId, peerConnection);
+        }
+
+        // Function to create an offer
+        function createOffer(callId, peerConnection) {
+            peerConnection.createOffer()
+                .then(offer => {
+                    return peerConnection.setLocalDescription(offer);
+                })
+                .then(() => {
+                    set(ref(database, 'calls/' + callId + '/offer'), peerConnection.localDescription);
+                })
+                .catch(error => {
+                    console.error("Error creating offer:", error);
+                });
+        }
+
+        // Initialize the call
+        setupCameraAndStartCall();
     </script>
 
     <!-- Your custom JavaScript for handling video/audio and the actual UI (camera logic) -->
     <script type="module" src="script.js"></script>
-
 </body>
 </html>
