@@ -1,7 +1,8 @@
-// Import Firebase SDK functions (this is for Firebase v9+)
+// Import the Firebase SDK modules
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
-import { getDatabase, ref, set, push, onChildAdded, onValue } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js";
+import { getDatabase, ref, set, onValue, push } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js";
 
+// Firebase configuration (use your actual credentials here)
 const firebaseConfig = {
   apiKey: "AIzaSyButcRwGtboCo_WrVxVz-7NXiaawmEY0NI",
   authDomain: "create-database-a8af3.firebaseapp.com",
@@ -14,97 +15,46 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-const app = initializeApp(firebaseConfig); // Initialize Firebase
-const database = getDatabase(app); // Get the Realtime Database instance
+const app = initializeApp(firebaseConfig);
+const database = getDatabase(app); // Get a reference to the Realtime Database
 
-const videoGrid = document.getElementById("video-grid");
-const servers = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
-const peerConnections = {}; // Stores all connections
-let localStream;
+// Log to confirm Firebase initialization
+console.log("Firebase Initialized:", app);
 
-// 🔹 Get User Media (Camera & Mic)
-navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-    .then(stream => {
-        console.log("Local stream received");  // Debugging line
-        localStream = stream;
-        const localVideo = document.createElement("video");
-        localVideo.srcObject = stream;
-        localVideo.muted = true;
-        localVideo.autoplay = true;
-        videoGrid.appendChild(localVideo);
+// Define the reference to your Realtime Database
+const dbRef = ref(database, 'calls/');
 
-        // Listen for new connections
-        const callersRef = ref(database, "callers");
-        onChildAdded(callersRef, (snapshot) => {
-            const callerId = snapshot.key;
-            console.log("New caller detected:", callerId); // Debugging line
-            if (callerId !== firebase.auth().currentUser?.uid) {
-                connectToUser(callerId);
-            }
-        });
-
-        // Announce presence
-        const userRef = push(callersRef);
-        set(userRef, true);
-        onValue(userRef, () => {}, { onlyOnce: true });
-    })
-    .catch(err => {
-        console.error("Error accessing media devices.", err);  // Debugging line
-    });
-
-// 🔹 Connect to a new user
-function connectToUser(callerId) {
-    console.log("Connecting to user:", callerId);  // Debugging line
-    const peerConnection = new RTCPeerConnection(servers);
-    peerConnections[callerId] = peerConnection;
-
-    localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-
-    peerConnection.ontrack = event => {
-        const remoteVideo = document.createElement("video");
-        remoteVideo.srcObject = event.streams[0];
-        remoteVideo.autoplay = true;
-        videoGrid.appendChild(remoteVideo);
-    };
-
-    peerConnection.onicecandidate = event => {
-        if (event.candidate) {
-            const candidatesRef = ref(database, `candidates/${callerId}`);
-            push(candidatesRef, event.candidate);
-        }
-    };
-
-    // 🔹 Handle Offer/Answer exchange
-    const offersRef = ref(database, `offers/${callerId}`);
-    onValue(offersRef, snapshot => {
-        if (snapshot.exists()) {
-            peerConnection.setRemoteDescription(new RTCSessionDescription(snapshot.val()));
-            peerConnection.createAnswer()
-                .then(answer => {
-                    peerConnection.setLocalDescription(answer);
-                    const answersRef = ref(database, `answers/${callerId}`);
-                    set(answersRef, answer);
-                });
-        } else {
-            peerConnection.createOffer()
-                .then(offer => {
-                    peerConnection.setLocalDescription(offer);
-                    set(offersRef, offer);
-                });
-        }
-    });
-
-    const answersRef = ref(database, `answers/${callerId}`);
-    onValue(answersRef, snapshot => {
-        if (snapshot.exists()) {
-            peerConnection.setRemoteDescription(new RTCSessionDescription(snapshot.val()));
-        }
-    });
-
-    const candidatesRef = ref(database, `candidates/${callerId}`);
-    onChildAdded(candidatesRef, snapshot => {
-        if (snapshot.exists()) {
-            peerConnection.addIceCandidate(new RTCIceCandidate(snapshot.val()));
-        }
-    });
+// Example function to store a new call record
+function storeCallData(callId, callDetails) {
+  const callRef = push(dbRef); // Push new data into the 'calls' node
+  set(callRef, {
+    callId: callId,
+    details: callDetails,
+    timestamp: new Date().toISOString()
+  }).then(() => {
+    console.log("Call data saved successfully!");
+  }).catch((error) => {
+    console.error("Error saving call data: ", error);
+  });
 }
+
+// Function to listen for updates in the 'calls' node
+function listenForCalls() {
+  onValue(dbRef, (snapshot) => {
+    const calls = snapshot.val();
+    console.log("Current calls:", calls);
+    // You can use this data to update the UI, display call information, etc.
+  }, (error) => {
+    console.error("Error reading data: ", error);
+  });
+}
+
+// Call the listenForCalls function to listen for updates in real-time
+listenForCalls();
+
+// Example of storing a new call data (this can be triggered on user action like clicking a button)
+storeCallData('call123', { host: 'User1', participants: ['User1', 'User2', 'User3'] });
+
+// You can also handle additional actions like screen sharing, joining a call, etc.
+// The structure for those actions will depend on the rest of your app's logic
+
