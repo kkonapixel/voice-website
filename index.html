@@ -137,23 +137,22 @@
                     };
 
                     // Create an offer to connect to the new user
-                    const offer = await peerConnection.createOffer();
-                    await peerConnection.setLocalDescription(new RTCSessionDescription({ type: "offer", sdp: offer.sdp }));
-
-                    // Send the offer to the new peer (via Firebase)
-                    set(ref(database, 'calls/groupVideoCall/' + peerId), { offer: offer });
-
-                    // Listen for answers from the other user
-                    onChildChanged(dbRef, async (change) => {
-                        if (change.val().answer) {
-                            const answer = change.val().answer;
-
-                            // Ensure that the connection is not already stable before setting the answer
-                            if (peerConnection.signalingState === "stable") {
-                                await peerConnection.setRemoteDescription(new RTCSessionDescription({ type: "answer", sdp: answer.sdp }));
-                            }
+                    try {
+                        const offer = await peerConnection.createOffer();
+                        console.log("Created offer: ", offer);
+                        if (!offer) {
+                            throw new Error("Offer is undefined");
                         }
-                    });
+
+                        // Set the local description
+                        await peerConnection.setLocalDescription(new RTCSessionDescription({ type: "offer", sdp: offer.sdp }));
+
+                        // Send the offer to the new peer (via Firebase)
+                        set(ref(database, 'calls/groupVideoCall/' + peerId), { offer: offer });
+
+                    } catch (error) {
+                        console.error("Error creating or sending offer:", error);
+                    }
                 });
 
                 // Listen for other users sending offers
@@ -163,6 +162,11 @@
 
                     // Don't process your own offer
                     if (peerId === userId) return;
+
+                    if (!offer) {
+                        console.error("Offer is undefined when received from peer", peerId);
+                        return; // Skip if offer is undefined
+                    }
 
                     // Set up peer connection for the other user
                     const peerConnection = new RTCPeerConnection({ iceServers });
@@ -181,13 +185,19 @@
                         remoteVideo.srcObject = event.streams[0];
                     };
 
-                    // Set remote description and create an answer
-                    await peerConnection.setRemoteDescription(new RTCSessionDescription({ type: "offer", sdp: offer.sdp }));
-                    const answer = await peerConnection.createAnswer();
-                    await peerConnection.setLocalDescription(new RTCSessionDescription({ type: "answer", sdp: answer.sdp }));
+                    try {
+                        // Set remote description and create an answer
+                        await peerConnection.setRemoteDescription(new RTCSessionDescription({ type: "offer", sdp: offer.sdp }));
 
-                    // Send the answer back to the offerer
-                    set(ref(database, 'calls/groupVideoCall/' + peerId), { answer: answer });
+                        const answer = await peerConnection.createAnswer();
+                        console.log("Created answer: ", answer);
+                        await peerConnection.setLocalDescription(new RTCSessionDescription({ type: "answer", sdp: answer.sdp }));
+
+                        // Send the answer back to the offerer
+                        set(ref(database, 'calls/groupVideoCall/' + peerId), { answer: answer });
+                    } catch (error) {
+                        console.error("Error setting remote description or creating answer:", error);
+                    }
                 });
             } catch (err) {
                 console.error('Error getting media:', err);
