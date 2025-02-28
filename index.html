@@ -4,60 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Group Video Call</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            margin: 0;
-            padding: 0;
-            background-color: #f4f4f4;
-        }
-        h1 {
-            margin-top: 20px;
-        }
-        #video-container {
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: center;
-            width: 100%;
-        }
-        video {
-            width: 300px;
-            height: 200px;
-            margin: 10px;
-            border-radius: 10px;
-            border: 2px solid #ccc;
-        }
-        #join-btn {
-            padding: 10px 20px;
-            margin: 20px;
-            background-color: #007bff;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-        #join-btn:hover {
-            background-color: #0056b3;
-        }
-    </style>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.3.2/peerjs.min.js"></script>
 </head>
 <body>
-
     <h1>Group Video Call</h1>
-    <button id="join-btn">Join Call</button>
-    <div id="video-container"></div>
+    <button id="joinCallBtn">Join Call</button>
+    <video id="localVideo" autoplay muted></video>
+    <div id="remoteVideos"></div>
 
-    <!-- Add Firebase SDKs as modules -->
-    <script type="module">
-        // Firebase imports
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
-        import { getDatabase, ref, set, onChildAdded, onChildChanged } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js";
-
-        // Your Firebase configuration
+    <script>
+        // Firebase config
         const firebaseConfig = {
             apiKey: "AIzaSyButcRwGtboCo_WrVxVz-7NXiaawmEY0NI",
             authDomain: "create-database-a8af3.firebaseapp.com",
@@ -68,148 +27,118 @@
             appId: "1:180941029548:web:438ade660742bee6629f09",
             measurementId: "G-5222C6DH4Y"
         };
+        firebase.initializeApp(firebaseConfig);
 
-        // Initialize Firebase
-        const app = initializeApp(firebaseConfig);
-        const database = getDatabase(app);
-
-        // Reference to Firebase Realtime Database for storing users in the call
-        const dbRef = ref(database, 'calls/groupVideoCall');
-
-        // Video elements
-        const localVideo = document.createElement('video');
-        localVideo.setAttribute('autoplay', 'true');
-        localVideo.setAttribute('muted', 'true');
-        document.getElementById('video-container').appendChild(localVideo);
-
-        // STUN server (no TURN server)
-        const iceServers = [
-            {
-                urls: "stun:stun.l.google.com:19302" // Google STUN server
-            }
-        ];
-
-        // Local stream (user's webcam and microphone)
+        const db = firebase.database();
+        const peer = new Peer();
+        const localVideo = document.getElementById('localVideo');
+        const remoteVideos = document.getElementById('remoteVideos');
         let localStream;
-        let peerConnections = {};
 
-        // When the "Join Call" button is clicked
-        document.getElementById('join-btn').onclick = () => {
-            startCall();
-        };
-
-        // Start the call (get local video/audio and set up Firebase)
-        async function startCall() {
+        // Get user media and set up video
+        async function initLocalVideo() {
             try {
-                // Get the user's media (camera and microphone)
                 localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
                 localVideo.srcObject = localStream;
-
-                // Store the user's ID in Firebase
-                const userId = Math.floor(Math.random() * 1000000).toString();
-                set(ref(database, 'calls/groupVideoCall/' + userId), {
-                    id: userId,
-                    stream: true
-                });
-
-                // Listen for other users joining the call
-                onChildAdded(dbRef, async (snapshot) => {
-                    const peerId = snapshot.key;
-
-                    // Don't connect to yourself
-                    if (peerId === userId) return;
-
-                    // Set up a new peer connection for each new user
-                    const peerConnection = new RTCPeerConnection({ iceServers });
-                    peerConnections[peerId] = peerConnection;
-
-                    // Add the local stream to the peer connection
-                    localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-
-                    // Display remote video
-                    const remoteVideo = document.createElement('video');
-                    remoteVideo.setAttribute('autoplay', 'true');
-                    document.getElementById('video-container').appendChild(remoteVideo);
-
-                    // Set up the remote stream
-                    peerConnection.ontrack = (event) => {
-                        remoteVideo.srcObject = event.streams[0];
-                    };
-
-                    // Create an offer to connect to the new user
-                    try {
-                        const offer = await peerConnection.createOffer();
-                        console.log("Created offer: ", offer);
-                        if (!offer) {
-                            throw new Error("Offer is undefined");
-                        }
-
-                        // Set the local description
-                        await peerConnection.setLocalDescription(new RTCSessionDescription({ type: "offer", sdp: offer.sdp }));
-
-                        // Send the offer to the new peer (via Firebase)
-                        set(ref(database, 'calls/groupVideoCall/' + peerId), { offer: offer });
-
-                    } catch (error) {
-                        console.error("Error creating or sending offer:", error);
-                    }
-                });
-
-                // Listen for other users sending offers
-                onChildChanged(dbRef, async (snapshot) => {
-                    const peerId = snapshot.key;
-                    const peerData = snapshot.val();
-                    const offer = peerData?.offer;
-
-                    console.log("Received data from peer", peerId, peerData);
-
-                    // Don't process your own offer
-                    if (peerId === userId) return;
-
-                    // Add debug logs
-                    if (!offer) {
-                        console.error("Offer is undefined when received from peer", peerId);
-                        return; // Skip if offer is undefined
-                    } else {
-                        console.log("Offer received:", offer);
-                    }
-
-                    // Set up peer connection for the other user
-                    const peerConnection = new RTCPeerConnection({ iceServers });
-                    peerConnections[peerId] = peerConnection;
-
-                    // Add the local stream to the peer connection
-                    localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-
-                    // Display remote video
-                    const remoteVideo = document.createElement('video');
-                    remoteVideo.setAttribute('autoplay', 'true');
-                    document.getElementById('video-container').appendChild(remoteVideo);
-
-                    // Set up the remote stream
-                    peerConnection.ontrack = (event) => {
-                        remoteVideo.srcObject = event.streams[0];
-                    };
-
-                    try {
-                        // Set remote description and create an answer
-                        await peerConnection.setRemoteDescription(new RTCSessionDescription({ type: "offer", sdp: offer.sdp }));
-
-                        const answer = await peerConnection.createAnswer();
-                        console.log("Created answer: ", answer);
-                        await peerConnection.setLocalDescription(new RTCSessionDescription({ type: "answer", sdp: answer.sdp }));
-
-                        // Send the answer back to the offerer
-                        set(ref(database, 'calls/groupVideoCall/' + peerId), { answer: answer });
-                    } catch (error) {
-                        console.error("Error setting remote description or creating answer:", error);
-                    }
-                });
             } catch (err) {
-                console.error('Error getting media:', err);
+                console.error('Error accessing media devices.', err);
             }
         }
-    </script>
 
+        initLocalVideo();
+
+        // Handle peer connection creation
+        const peers = {};
+
+        peer.on('call', (incomingCall) => {
+            console.log("Incoming call from peer:", incomingCall.peer);
+            const remoteVideo = document.createElement('video');
+            remoteVideo.autoplay = true;
+            remoteVideo.id = `remoteVideo-${incomingCall.peer}`;
+            remoteVideos.appendChild(remoteVideo);
+
+            incomingCall.answer(localStream);
+
+            incomingCall.on('stream', (remoteStream) => {
+                remoteVideo.srcObject = remoteStream;
+            });
+
+            peers[incomingCall.peer] = incomingCall;
+        });
+
+        // Handle join call button click
+        document.getElementById('joinCallBtn').addEventListener('click', () => {
+            const peerId = prompt("Enter Peer ID to join the call:");
+
+            if (peerId) {
+                console.log("Joining call with peer:", peerId);
+
+                const call = peer.call(peerId, localStream);
+                call.on('stream', (remoteStream) => {
+                    const remoteVideo = document.createElement('video');
+                    remoteVideo.autoplay = true;
+                    remoteVideo.id = `remoteVideo-${peerId}`;
+                    remoteVideos.appendChild(remoteVideo);
+                    remoteVideo.srcObject = remoteStream;
+                });
+
+                call.on('close', () => {
+                    document.getElementById(`remoteVideo-${peerId}`).remove();
+                });
+
+                // Send the offer to Firebase
+                const offer = call.peerConnection.localDescription;
+                console.log("Sending offer to Firebase:", offer);
+
+                // Store offer in Firebase under a unique key
+                const peerData = { offer: offer };
+                const peerRef = db.ref('calls/groupVideoCall/' + peerId);
+                peerRef.set(peerData);
+            }
+        });
+
+        // Listen for incoming offers and handle them
+        db.ref('calls/groupVideoCall').on('child_added', (snapshot) => {
+            const peerId = snapshot.key;
+            const peerData = snapshot.val();
+            const offer = peerData?.offer;
+
+            if (!offer) {
+                console.error("Offer is undefined when received from peer", peerId);
+                return;
+            }
+
+            console.log("Received offer from peer:", peerId, offer);
+
+            // Handle the offer
+            const call = peer.call(peerId, localStream);
+            call.on('stream', (remoteStream) => {
+                const remoteVideo = document.createElement('video');
+                remoteVideo.autoplay = true;
+                remoteVideo.id = `remoteVideo-${peerId}`;
+                remoteVideos.appendChild(remoteVideo);
+                remoteVideo.srcObject = remoteStream;
+            });
+
+            call.on('close', () => {
+                document.getElementById(`remoteVideo-${peerId}`).remove();
+            });
+
+            // Send answer back to the peer
+            const answer = await peer.connection.createAnswer();
+            await peer.connection.setLocalDescription(answer);
+
+            // Update Firebase with the answer
+            db.ref('calls/groupVideoCall/' + peerId).update({ answer: answer });
+        });
+
+        // Handle peer connection close
+        peer.on('close', () => {
+            for (const peerId in peers) {
+                peers[peerId].close();
+            }
+        });
+
+    </script>
 </body>
 </html>
