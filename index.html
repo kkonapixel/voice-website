@@ -161,12 +161,17 @@
                     const peerData = snapshot.val();
                     const offer = peerData?.offer;
 
+                    console.log("Received data from peer", peerId, peerData);
+
                     // Don't process your own offer
                     if (peerId === userId) return;
 
+                    // Add debug logs
                     if (!offer) {
                         console.error("Offer is undefined when received from peer", peerId);
                         return; // Skip if offer is undefined
+                    } else {
+                        console.log("Offer received:", offer);
                     }
 
                     // Set up peer connection for the other user
